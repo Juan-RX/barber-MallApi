@@ -203,31 +203,15 @@ export class VentasService {
    * Este método busca el servicio por código externo y crea la venta automáticamente
    */
   async registrarVentaServicio(registroDto: CreateRegistroVentaServicioDto): Promise<RegistroVentaServicioResponseDto> {
-    // 1. Buscar o crear el servicio usando los datos del body
+    // 1. Buscar el servicio por código externo (DEBE existir, no se crea)
     let servicio = await this.servicioRepository.findOne({
       where: { codigoExterno: registroDto.service_external_id },
     });
 
     if (!servicio) {
-      // Si no existe, crear el servicio con los datos del body
-      servicio = this.servicioRepository.create({
-        codigoExterno: registroDto.service_external_id,
-        nombre: registroDto.service_name,
-        descripcion: registroDto.service_description,
-        precio: registroDto.service_price,
-        duracionMinutos: registroDto.duration_minutes,
-        activo: true,
-      });
-      servicio = await this.servicioRepository.save(servicio);
-    } else {
-      // Si existe, actualizar con los datos del body
-      servicio.nombre = registroDto.service_name;
-      if (registroDto.service_description) {
-        servicio.descripcion = registroDto.service_description;
-      }
-      servicio.precio = registroDto.service_price;
-      servicio.duracionMinutos = registroDto.duration_minutes;
-      servicio = await this.servicioRepository.save(servicio);
+      throw new NotFoundException(
+        `Servicio con código externo "${registroDto.service_external_id}" no encontrado. El servicio debe existir previamente en el catálogo.`
+      );
     }
 
     // 2. Buscar cliente por user_id o generar código externo automático
@@ -280,35 +264,16 @@ export class VentasService {
     }
 
     // 4. Obtener estado de venta: mapear payment_status (string) a estado_venta_id (number)
-    let estadoVentaId: number;
+    const estadoVenta = await this.estadoVentaRepository.findOne({
+      where: { codigo: registroDto.payment_status.toUpperCase() },
+    });
     
-    if (registroDto.payment_status) {
-      // Buscar estado por código (payment_status)
-      const estadoVenta = await this.estadoVentaRepository.findOne({
-        where: { codigo: registroDto.payment_status.toUpperCase() },
-      });
-      if (!estadoVenta) {
-        throw new NotFoundException(
-          `Estado de venta con código "${registroDto.payment_status}" no encontrado. Estados disponibles: PENDIENTE, PAGADA, CANCELADA, etc.`,
-        );
-      }
-      estadoVentaId = estadoVenta.estadoVentaId;
-    } else {
-      // Si no se proporciona payment_status, buscar estado por defecto (PENDIENTE)
-      const estadoDefault = await this.estadoVentaRepository.findOne({
-        where: { codigo: 'PENDIENTE' },
-      });
-      if (!estadoDefault) {
-        // Si no existe PENDIENTE, tomar el primero disponible
-        const primerEstado = await this.estadoVentaRepository.find({ take: 1 });
-        if (primerEstado.length === 0) {
-          throw new BadRequestException('No hay estados de venta configurados en el sistema');
-        }
-        estadoVentaId = primerEstado[0].estadoVentaId;
-      } else {
-        estadoVentaId = estadoDefault.estadoVentaId;
-      }
+    if (!estadoVenta) {
+      throw new NotFoundException(
+        `Estado de venta con código "${registroDto.payment_status}" no encontrado. Estados disponibles: PENDIENTE, PAGADA, CANCELADA, etc.`
+      );
     }
+    const estadoVentaId = estadoVenta.estadoVentaId;
 
     // 5. Generar order_code automáticamente (SIEMPRE se genera, no se acepta del request)
     const timestamp = Date.now();
@@ -332,55 +297,40 @@ export class VentasService {
     }
 
     // 6. Procesar appointment_time
-    // Si se proporciona apointment_date pero no apointment_time, usar la fecha con hora 00:00:00
-    // Si se proporciona apointment_time, usarlo directamente
     // Acepta formato "HH:mm" (ej: "16:00") o formato ISO completo
-    let appointmentTime: Date | undefined;
-    if (registroDto.apointment_time) {
-      const timeStr = registroDto.apointment_time.trim();
-      // Verificar si es formato "HH:mm" (ej: "16:00")
-      const horaSimpleRegex = /^(\d{1,2}):(\d{2})$/;
-      const match = timeStr.match(horaSimpleRegex);
+    let appointmentTime: Date;
+    const timeStr = registroDto.apointment_time.trim();
+    // Verificar si es formato "HH:mm" (ej: "16:00")
+    const horaSimpleRegex = /^(\d{1,2}):(\d{2})$/;
+    const match = timeStr.match(horaSimpleRegex);
+    
+    if (match) {
+      // Es formato "HH:mm", combinar con fecha
+      const horas = parseInt(match[1], 10);
+      const minutos = parseInt(match[2], 10);
       
-      if (match) {
-        // Es formato "HH:mm", combinar con fecha
-        const horas = parseInt(match[1], 10);
-        const minutos = parseInt(match[2], 10);
-        
-        if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) {
-          throw new BadRequestException('El formato de apointment_time no es válido. Hora debe estar entre 00:00 y 23:59');
-        }
-        
-        // Usar apointment_date si está presente, sino usar fecha actual
-        const fechaBase = registroDto.apointment_date 
-          ? registroDto.apointment_date 
-          : new Date().toISOString().split('T')[0];
-        
-        appointmentTime = new Date(`${fechaBase}T${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:00`);
-        if (isNaN(appointmentTime.getTime())) {
-          throw new BadRequestException('El formato de apointment_time no es válido');
-        }
-      } else {
-        // Formato ISO completo o otro formato
-        appointmentTime = new Date(registroDto.apointment_time);
-        if (isNaN(appointmentTime.getTime())) {
-          throw new BadRequestException('El formato de apointment_time no es válido');
-        }
+      if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) {
+        throw new BadRequestException('El formato de apointment_time no es válido. Hora debe estar entre 00:00 y 23:59');
       }
-    } else if (registroDto.apointment_date) {
-      // Si solo se proporciona la fecha, usar medianoche de esa fecha
-      appointmentTime = new Date(`${registroDto.apointment_date}T00:00:00`);
+      
+      appointmentTime = new Date(`${registroDto.apointment_date}T${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:00`);
       if (isNaN(appointmentTime.getTime())) {
-        throw new BadRequestException('El formato de apointment_date no es válido');
+        throw new BadRequestException('El formato de apointment_time no es válido');
+      }
+    } else {
+      // Formato ISO completo o otro formato
+      appointmentTime = new Date(registroDto.apointment_time);
+      if (isNaN(appointmentTime.getTime())) {
+        throw new BadRequestException('El formato de apointment_time no es válido');
       }
     }
 
     // 7. Usar precio proporcionado directamente del body
     const precioProporcionado = registroDto.service_price;
 
-    // 9. Calcular totales
-    const quantity = registroDto.quantity || 1;
-    const discountAmount = registroDto.discount_amount || 0;
+    // 8. Calcular totales (valores por defecto: quantity=1, discount=0)
+    const quantity = 1; // Valor fijo por defecto
+    const discountAmount = 0; // Valor fijo por defecto
     const totalBruto = precioProporcionado * quantity;
     const totalNeto = totalBruto - discountAmount;
 
@@ -416,8 +366,8 @@ export class VentasService {
         totalBruto,
         descuentoTotal: discountAmount,
         totalNeto,
-        origen: registroDto.origen || 'MALL',
-        comentarios: registroDto.comentarios,
+        origen: 'MALL', // Valor fijo por defecto
+        comentarios: undefined, // No se acepta del request
       });
 
       const ventaGuardada = await queryRunner.manager.save(venta);
@@ -446,8 +396,6 @@ export class VentasService {
         serviceExternalId: registroDto.service_external_id,
         appointmentTime: citaMall?.fechaInicio ?? appointmentTime,
         citaId: citaMall?.citaId,
-        // Los campos service_name, service_description, duration no se guardan directamente
-        // pero están disponibles en la relación con el servicio
       });
 
       await queryRunner.manager.save(ventaLinea);
@@ -920,12 +868,6 @@ export class VentasService {
       horaReserva = `${horas}:${minutos}:${segundos}`;
     }
 
-    // Generar código de reserva: BAR-YYYYMMDD-{ventaId}
-    const fechaSinGuiones = fechaReserva 
-      ? fechaReserva.replace(/-/g, '') 
-      : new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const codigoReserva = `BAR-${fechaSinGuiones}-${venta.ventaId}`;
-
     // Obtener duration_minutes
     const durationMinutes = registroDto?.duration_minutes || servicio.duracionMinutos || 0;
 
@@ -935,7 +877,6 @@ export class VentasService {
     return {
       message: message,
       venta_id_barberia: venta.ventaId,
-      codigo_reserva: codigoReserva,
       mall_order_id: mallOrderId,
       estatus_cita: estatusCita,
       fecha_cita: fechaReserva || undefined,

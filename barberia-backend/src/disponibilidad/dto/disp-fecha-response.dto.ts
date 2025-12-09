@@ -1,8 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class DispFechaResponseDto {
-  @ApiProperty({ description: 'ID del servicio', example: 3 })
-  servicio_id: number;
+  @ApiProperty({ 
+    description: 'Código externo del servicio (codigo_externo)', 
+    example: 'SRV003' 
+  })
+  servicio_id: string;
 
   @ApiProperty({
     description: 'Fecha y hora de inicio del slot disponible',
@@ -33,6 +36,6 @@ export class DispFechaResponseDto {
   id_cita?: number | null;
 
   @ApiProperty({ description: 'ID del barbero disponible', example: 4 })
-  id_bar: number;
+  id_barbero: number;
 }
 

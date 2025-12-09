@@ -8,8 +8,8 @@ export class CatalogoResponseDto {
   @ApiProperty({ description: 'ID de la sucursal', example: 1 })
   store_id: number;
 
-  @ApiProperty({ description: 'ID del servicio', example: 1 })
-  id: number;
+  @ApiProperty({ description: 'ID del servicio', example: 'SRV001' })
+  id: string;
 
   @ApiProperty({ description: 'Nombre del servicio', example: 'Corte de cabello' })
   nombre: string;

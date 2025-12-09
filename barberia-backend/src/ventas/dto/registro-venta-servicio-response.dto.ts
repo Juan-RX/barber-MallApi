@@ -20,8 +20,9 @@ export class RegistroVentaServicioResponseDto {
   @ApiProperty({
     description: 'Código de reserva único generado',
     example: 'BAR-20251130-17',
+    required: false,
   })
-  codigo_reserva: string;
+  codigo_reserva?: string;
 
   @ApiProperty({
     description: 'Código de orden de la venta (order_code)',

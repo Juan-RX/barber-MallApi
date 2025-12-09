@@ -192,17 +192,17 @@ export class CatalogoController {
   @ApiOperation({
     summary: 'Solicitar catálogo del mall (Interface 3 - SOLICITA_CATALOGO)',
     description:
-      'Endpoint para que el mall solicite el catálogo. El mall no envía datos, solo realiza la solicitud. Retorna catálogo en formato Interface 4 - CATALOGO. El parámetro store_id es opcional via query params.',
+      'Endpoint para que el mall solicite el catálogo. El mall no envía datos, solo realiza la solicitud. Retorna catálogo en formato Interface 4 - CATALOGO. Siempre retorna servicios de la sucursal 4 (store_id: 4), ignorando cualquier parámetro store_id enviado.',
   })
-  @ApiQuery({ name: 'store_id', required: false, type: Number, description: 'ID de la sucursal (opcional)' })
+  @ApiQuery({ name: 'store_id', required: false, type: Number, description: 'ID de la sucursal (ignorado, siempre retorna sucursal 4)' })
   @ApiResponse({
     status: 200,
-    description: 'Catálogo en formato mall (Interface 4 - CATALOGO)',
+    description: 'Catálogo en formato mall (Interface 4 - CATALOGO) - Solo servicios de la sucursal 4',
     type: [CatalogoResponseDto],
   })
   solicitarCatalogoMall(@Query('store_id') storeId?: string): Promise<CatalogoResponseDto[]> {
-    const storeIdNum = storeId ? parseInt(storeId) : undefined;
-    return this.catalogoService.solicitarCatalogoMall(storeIdNum);
+    // El parámetro storeId se ignora, siempre se usa sucursal 4
+    return this.catalogoService.solicitarCatalogoMall();
   }
 
   // ========== BARBEROS ==========

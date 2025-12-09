@@ -511,13 +511,13 @@ export class DisponibilidadService {
             });
 
             slotsDisponibles.push({
-              servicio_id: servicio.servicioId,
+              servicio_id: servicio.codigoExterno || '',
               fecha_inicio: formatearFecha(slotInicio),
               fecha_fin: formatearFecha(slotFin),
               duracion_minutos: duracionMinutos,
               appointment_time: formatearHora(slotInicio),
               id_cita: citaEnSlot?.citaId || null,
-              id_bar: barbero.barberoId,
+              id_barbero: barbero.barberoId,
             });
           }
 

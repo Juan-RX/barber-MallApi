@@ -330,35 +330,31 @@ export class CatalogoService {
    * Procesa solicitud de catálogo del mall (Interface 3 - SOLICITA_CATALOGO)
    * El mall no envía datos, solo realiza la solicitud
    * Retorna catálogo en formato Interface 4 - CATALOGO
+   * Siempre retorna servicios de la sucursal 4 (store_id: 4)
    */
   async solicitarCatalogoMall(storeId?: number): Promise<CatalogoResponseDto[]> {
-    // Si se proporciona store_id, validar que la sucursal existe
-    if (storeId) {
-      const sucursal = await this.findSucursalById(storeId);
-      if (!sucursal) {
-        throw new NotFoundException(`Sucursal con ID ${storeId} no encontrada`);
-      }
+    // Siempre usar sucursal 4, ignorar el parámetro storeId
+    const storeIdFijo = 4;
+    
+    // Validar que la sucursal 4 existe
+    const sucursal = await this.findSucursalById(storeIdFijo);
+    if (!sucursal) {
+      throw new NotFoundException(`Sucursal con ID ${storeIdFijo} no encontrada`);
     }
 
-    // Obtener servicios activos
-    const where: any = {
-      activo: true,
-    };
-
-    // Si se proporciona store_id, filtrar por sucursal
-    if (storeId) {
-      where.storeId = storeId;
-    }
-
+    // Obtener servicios activos de la sucursal 4
     const servicios = await this.servicioRepository.find({
-      where,
+      where: {
+        activo: true,
+        storeId: storeIdFijo,
+      },
       relations: ['sucursal'],
     });
 
     // Transformar a formato Interface 4 - CATALOGO
     return servicios.map((servicio) => ({
-      store_id: servicio.storeId || storeId || 0,
-      id: servicio.servicioId,
+      store_id: storeIdFijo,
+      id: servicio.codigoExterno,
       nombre: servicio.nombre,
       description: servicio.descripcion || undefined,
       precio: Number(servicio.precio),
